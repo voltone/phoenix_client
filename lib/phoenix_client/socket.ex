@@ -24,7 +24,12 @@ defmodule PhoenixClient.Socket do
     GenServer.start_link(__MODULE__, opts, genserver_opts)
   end
 
+  def close(pid) do
+    GenServer.call(pid, :close)
+  end
+
   def stop(pid) do
+    close(pid)
     GenServer.stop(pid)
   end
 
@@ -153,6 +158,19 @@ defmodule PhoenixClient.Socket do
   @impl true
   def handle_call(:status, _from, state) do
     {:reply, state.status, state}
+  end
+
+  @impl true
+  def handle_call(:close, _from, %{status: :connected, transport: transport, transport_pid: transport_pid} = state) do
+    transport.close(transport_pid)
+    {:reply, :ok, close(:normal, %{state | status: :disconnected, reconnect: false})}
+  end
+
+  def handle_call(:close, _from, %{status: :disconnected, reconnect_timer: reconnect_timer} = state) do
+    if reconnect_timer do
+      :timer.cancel(reconnect_timer)
+    end
+    {:reply, :ok, %{state | reconnect: false, reconnect_timer: nil}}
   end
 
   @impl true
